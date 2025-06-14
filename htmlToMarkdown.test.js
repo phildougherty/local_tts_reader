@@ -301,5 +301,32 @@ describe('HtmlToMarkdown', () => {
       expect(result).toContain('- Fixed bug Y');
       expect(result).toContain('### Testing');
     });
+    
+    test('should handle GitHub markdown-heading with permalink anchors', () => {
+      const html = `
+        <div class="markdown-heading" dir="auto">
+          <h2 tabindex="-1" class="heading-element" dir="auto">Features</h2>
+          <a id="user-content-features" class="anchor" aria-label="Permalink: Features" href="#features">
+            <svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true">
+              <path d="..."></path>
+            </svg>
+          </a>
+        </div>
+        <ul dir="auto">
+          <li>🎯 Read selected text</li>
+          <li>🎭 Multiple voices</li>
+        </ul>
+      `;
+      
+      const result = HtmlToMarkdown.convert(html);
+      // Should have the header without the anchor link
+      expect(result).toContain('## Features');
+      // Should NOT have empty link markup
+      expect(result).not.toContain('[](#features)');
+      expect(result).not.toContain('[]');
+      // Should have the list items
+      expect(result).toContain('- 🎯 Read selected text');
+      expect(result).toContain('- 🎭 Multiple voices');
+    });
   });
 });

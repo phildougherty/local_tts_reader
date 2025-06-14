@@ -267,7 +267,8 @@ async function processNextChunk(expectedSessionId = null) {
 }
 
 // Process and read text with default settings
-async function processAndReadText(text, tabId) {
+async function processAndReadText(htmlAndTextResult, tabId) {
+  console.log(`processAndReadText: htmlAndTextResult=${JSON.stringify(htmlAndTextResult)}`)
   try {
     // Initialize chunker if needed
     initializeTextChunker();
@@ -315,9 +316,48 @@ async function processAndReadText(text, tabId) {
       ...savedSettings,
       voice: useCustomVoice ? savedSettings.customVoice.trim() : savedSettings.voice
     };
-    
+
     // Process text if enabled
+    let text = htmlAndTextResult.text
+    console.log(`processAndReadText: initial innerText=${JSON.stringify(text)}`)
+
+    const html = htmlAndTextResult.html
     if (settings.preprocessText && tabId) {
+      // Convert html text to markdown.
+      if (!!html) {
+        console.log(`Has html to convert to markdown: ${html}`)
+        // Convert html to markdown and use that as text to retain structure.
+        try {
+          const checkResult = await chrome.scripting.executeScript({
+            target: { tabId: tabId },
+            func: () => typeof window.HtmlToMarkdown !== 'undefined'
+          });
+          if (!checkResult[0].result) {
+            // Inject the html to markdown script only if it doesn't exist
+            console.log(`Initializing htmlToMarkdown.js`)
+            await chrome.scripting.executeScript({
+              target: { tabId: tabId },
+              files: ['htmlToMarkdown.js']
+            });
+          }
+          const markdownResult = await chrome.scripting.executeScript({
+            target: { tabId: tabId },
+            func: (htmlToProcess) => {
+              return window.HtmlToMarkdown.convert(htmlToProcess);
+            },
+            args: [html]
+          });
+          if (markdownResult && markdownResult[0] && markdownResult[0].result) {
+            text = markdownResult[0].result;
+            console.log(`✅ Got result from HtmlToMarkdown: ${text}`)
+          } else {
+            console.log(`❌ No result from HtmlToMarkdown`)
+          }
+        } catch(error) {
+          console.error('❌ Error from HtmlToMarkdown:', error);
+        }
+      }
+
       try {
         // Check if TextProcessor already exists, if not inject it
         const checkResult = await chrome.scripting.executeScript({
@@ -344,9 +384,12 @@ async function processAndReadText(text, tabId) {
         
         if (result && result[0] && result[0].result) {
           text = result[0].result;
+          console.log(`✅ Got result from TextProcessor: ${text}`)
+        } else {
+          console.log(`❌ No result from TextProcessor`)
         }
       } catch (error) {
-        console.error('Error processing text:', error);
+        console.error('❌ Error from TextProcessor:', error);
         // Fall back to using the original text
       }
     }

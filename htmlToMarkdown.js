@@ -41,6 +41,12 @@ class HtmlToMarkdown {
           result += text + ' ';
         }
       } else if (node.nodeType === Node.ELEMENT_NODE) {
+        // Skip GitHub permalink anchors
+        if (node.tagName.toLowerCase() === 'a' && 
+            node.classList.contains('anchor') && 
+            node.getAttribute('href')?.startsWith('#')) {
+          continue;
+        }
         result += this.convertElementToMarkdown(node);
       }
     }
@@ -101,6 +107,14 @@ class HtmlToMarkdown {
       
       case 'a':
         const href = element.getAttribute('href');
+        // Skip anchor links with no text (like GitHub permalink anchors)
+        if (!text || text.trim() === '') {
+          return '';
+        }
+        // Skip self-referencing anchors (like #section-name)
+        if (href && href.startsWith('#')) {
+          return '';
+        }
         if (href) {
           return `[${text}](${href})`;
         }
@@ -113,6 +127,17 @@ class HtmlToMarkdown {
         return '\n---\n';
       
       case 'div':
+        // Special handling for GitHub markdown-heading divs
+        if (element.classList.contains('markdown-heading')) {
+          // Process only the heading element, skip the anchor
+          const heading = element.querySelector('h1, h2, h3, h4, h5, h6');
+          if (heading) {
+            return this.convertElementToMarkdown(heading);
+          }
+        }
+        // Container elements - just process children
+        return `\n${this.processElement(element)}\n`;
+        
       case 'section':
       case 'article':
       case 'main':
@@ -160,12 +185,9 @@ class HtmlToMarkdown {
     let result = '';
     let counter = 1;
     
-    console.log('🔧 Processing list element:', listElement.tagName, 'children:', listElement.children.length);
-    
     for (const child of listElement.children) {
       if (child.tagName.toLowerCase() === 'li') {
         const itemText = this.processElement(child);
-        console.log('🔧 List item text:', itemText);
         if (isOrdered) {
           result += `${counter}. ${itemText}\n`;
           counter++;
@@ -174,8 +196,6 @@ class HtmlToMarkdown {
         }
       }
     }
-    
-    console.log('🔧 Final list result:', result);
     return result.trim();
   }
   
