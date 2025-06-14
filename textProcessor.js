@@ -15,9 +15,6 @@ class TextProcessor {
     
     let processedText = text;
     
-    // Remove markdown headers
-    processedText = processedText.replace(/^#{1,6}\s+(.+)$/gm, '$1');
-    
     // Remove markdown bold/italic
     processedText = processedText.replace(/(\*\*|__)(.*?)\1/g, '$2');
     processedText = processedText.replace(/(\*|_)(.*?)\1/g, '$2');
@@ -32,15 +29,43 @@ class TextProcessor {
     // Process URLs
     processedText = this.processUrls(processedText);
     
-    // Remove special characters that don't read well
-    processedText = processedText.replace(/[|*~`]/g, ' ');
+    // Process by lines to handle headers and lists properly (before removing special chars)
+    const lines = processedText.split('\n');
+    const processedLines = [];
     
-    // Remove excessive whitespace
-    processedText = processedText.replace(/\s+/g, ' ').trim();
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      if (!line) {
+        // Skip empty lines but they can separate sections
+        continue;
+      }
+      
+      // Handle headers
+      if (/^#{1,6}\s+/.test(line)) {
+        const headerText = line.replace(/^#{1,6}\s+/, '');
+        processedLines.push(headerText + ':');
+      }
+      // Handle list items
+      else if (/^[\s]*[-*+]\s+/.test(line)) {
+        const itemText = line.replace(/^[\s]*[-*+]\s+/, '');
+        processedLines.push(itemText + ',');
+      }
+      else if (/^\s*\d+\.\s+/.test(line)) {
+        const itemText = line.replace(/^\s*\d+\.\s+/, '');
+        processedLines.push(itemText + ',');
+      }
+      // Regular text
+      else {
+        processedLines.push(line);
+      }
+    }
     
-    // Remove markdown list markers
-    processedText = processedText.replace(/^[\s-]*[-*+]\s+/gm, '');
-    processedText = processedText.replace(/^\s*\d+\.\s+/gm, '');
+    // Join lines with spaces
+    processedText = processedLines.join(' ');
+    
+    // Remove special characters that don't read well (after list processing)
+    processedText = processedText.replace(/[|~`]/g, ' '); // Note: removed * since it's used in lists
     
     // Remove HTML tags
     processedText = processedText.replace(/<[^>]*>/g, '');
@@ -53,6 +78,17 @@ class TextProcessor {
     
     // Replace multiple dots with a single period
     processedText = processedText.replace(/\.{2,}/g, '.');
+    
+    // Clean up comma spacing and remove trailing commas at end of text
+    processedText = processedText.replace(/,\s*,/g, ','); // Remove double commas
+    processedText = processedText.replace(/,\s*$/, ''); // Remove trailing comma at end
+    processedText = processedText.replace(/,\s+/g, ', '); // Normalize comma spacing
+    
+    // Add period after lists when followed by headers or other content
+    processedText = processedText.replace(/,\s+([^,]+:)/g, '. $1');
+    
+    // Final whitespace cleanup
+    processedText = processedText.replace(/\s+/g, ' ').trim();
     
     return processedText;
   }

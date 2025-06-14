@@ -88,15 +88,67 @@ Default server URL: `http://localhost:8000/v1/audio/speech`
 
 ## Development
 
-The extension consists of three main files:
-- `manifest.json`: Extension configuration
-- `popup.html`: UI layout and styles
-- `popup.js`: Core functionality and event handlers
+### Architecture
+
+The extension consists of several key components:
+- `manifest.json`: Extension configuration and permissions
+- `popup.html`/`popup.js`: Main UI and user interactions
+- `background.js`: Service worker handling audio processing and chunking
+- `offscreen.js`: Audio playback in background context
+- `textProcessor.js`: Intelligent text processing for natural TTS
+- `audioPlayer.js`: Audio control abstraction layer
+
+### Testing
+
+This project uses [Jest](https://jestjs.io/) for comprehensive testing, particularly for the text processing functionality that converts markdown to speech-friendly text.
+
+#### Running Tests
+
+```bash
+# Install dependencies
+npm install
+
+# Run all tests
+npm test
+
+# Run tests in watch mode (reruns on file changes)
+npm run test:watch
+
+# Run tests with coverage report
+npm run test:coverage
+```
+
+#### Test Coverage
+
+Current test coverage: **92.72%** statements, **78.57%** branches
+
+Tests cover:
+- **Header Processing**: Converting `# Header` → `Header:` for natural pauses
+- **List Processing**: Converting `- Item` → `Item,` for comma separation
+- **Comma Cleanup**: Proper punctuation between sections
+- **Edge Cases**: Null inputs, empty text, error handling
+- **Markdown Processing**: Bold, italic, links, code blocks
+- **Symbol Processing**: Converting `$`, `%`, `&` to words
+- **Real-World Examples**: Documentation and README formats
+- **Performance**: Large text handling efficiency
+
+#### Text Processing Improvements
+
+The `TextProcessor` class enhances TTS naturalness by:
+
+1. **Headers**: `## Title` → `Title:` (adds natural pause indicator)
+2. **Lists**: `- Item 1\n- Item 2` → `Item 1, Item 2` (comma separation for flow)
+3. **Sections**: `## Features\n- Fast\n## Benefits` → `Features: Fast. Benefits:` (proper punctuation)
+
+This creates significantly more natural speech compared to raw markdown text.
+
+### Making Changes
 
 To modify the extension:
 1. Make your changes
-2. Reload the extension in `chrome://extensions/`
-3. Click the refresh icon on the extension card
+2. Run tests: `npm test`
+3. Reload the extension in `chrome://extensions/`
+4. Click the refresh icon on the extension card
 
 ## Contributing
 
