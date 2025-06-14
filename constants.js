@@ -3,7 +3,8 @@ const DEFAULT_SETTINGS = {
     voice: 'af_bella',
     speed: 1.0,
     recordAudio: false,
-    preprocessText: true
+    preprocessText: true,
+    enableChunking: true
   };
   
   if (typeof module !== 'undefined' && module.exports) {

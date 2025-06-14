@@ -77,7 +77,8 @@ function getSettings() {
     voice: voice,
     speed: document.getElementById('speed').value,
     recordAudio: document.getElementById('recordAudio').checked,
-    preprocessText: document.getElementById('preprocessText').checked
+    preprocessText: document.getElementById('preprocessText').checked,
+    enableChunking: document.getElementById('enableChunking').checked
   };
 }
 
@@ -183,6 +184,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     speed: DEFAULT_SETTINGS.speed,
     recordAudio: DEFAULT_SETTINGS.recordAudio,
     preprocessText: DEFAULT_SETTINGS.preprocessText,
+    enableChunking: true,
     voiceMode: 'preset',
     customVoice: ''
   }, function(result) {
@@ -191,6 +193,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     document.getElementById('speed').value = result.speed;
     document.getElementById('recordAudio').checked = result.recordAudio;
     document.getElementById('preprocessText').checked = result.preprocessText;
+    document.getElementById('enableChunking').checked = result.enableChunking;
     document.querySelector('.speed-value').textContent = `${result.speed}x`;
     
     // Set voice mode
@@ -326,7 +329,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
   
   // Save settings
-  ['serverUrl', 'voice', 'speed', 'recordAudio', 'preprocessText', 'customVoice'].forEach(id => {
+  ['serverUrl', 'voice', 'speed', 'recordAudio', 'preprocessText', 'enableChunking', 'customVoice'].forEach(id => {
     const element = document.getElementById(id);
     if (element) {
       element.addEventListener('change', saveSettings);
