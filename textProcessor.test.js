@@ -9,34 +9,162 @@ const TextProcessor = window.TextProcessor;
 
 describe('TextProcessor', () => {
   describe('Header Processing', () => {
-    test('should add colon to single H1 header', () => {
-      expect(TextProcessor.process('# Main Title')).toBe('Main Title:');
-    });
+    describe('Markdown Headers', () => {
+      test('should add colon to single H1 header', () => {
+        expect(TextProcessor.process('# Main Title')).toBe('Main Title:');
+      });
 
-    test('should add colon to H2 header', () => {
-      expect(TextProcessor.process('## Section Header')).toBe('Section Header:');
-    });
+      test('should add colon to H2 header', () => {
+        expect(TextProcessor.process('## Section Header')).toBe('Section Header:');
+      });
 
-    test('should add colon to H3 header', () => {
-      expect(TextProcessor.process('### Subsection')).toBe('Subsection:');
-    });
+      test('should add colon to H3 header', () => {
+        expect(TextProcessor.process('### Subsection')).toBe('Subsection:');
+      });
 
-    test('should create natural transition from header to content', () => {
-      const input = '## Important Note\nThis is the content that follows.';
-      const expected = 'Important Note: This is the content that follows.';
-      expect(TextProcessor.process(input)).toBe(expected);
-    });
+      test('should create natural transition from header to content', () => {
+        const input = '## Important Note\nThis is the content that follows.';
+        const expected = 'Important Note: This is the content that follows.';
+        expect(TextProcessor.process(input)).toBe(expected);
+      });
 
-    test('should process multiple headers correctly', () => {
-      const input = `# Main Title
+      test('should process multiple headers correctly', () => {
+        const input = `# Main Title
 Some intro text.
 ## Section One
 Content for section one.
 ### Subsection
 More detailed content.`;
-      
-      const expected = 'Main Title: Some intro text. Section One: Content for section one. Subsection: More detailed content.';
-      expect(TextProcessor.process(input)).toBe(expected);
+        
+        const expected = 'Main Title: Some intro text. Section One: Content for section one. Subsection: More detailed content.';
+        expect(TextProcessor.process(input)).toBe(expected);
+      });
+    });
+
+    describe('HTML Headers', () => {
+      test('should convert H1 HTML tags to markdown format', () => {
+        expect(TextProcessor.process('<h1>Main Title</h1>')).toBe('Main Title:');
+      });
+
+      test('should convert H2 HTML tags to markdown format', () => {
+        expect(TextProcessor.process('<h2>Section Header</h2>')).toBe('Section Header:');
+      });
+
+      test('should handle HTML headers with attributes', () => {
+        expect(TextProcessor.process('<h1 class="title" id="main">Header Text</h1>')).toBe('Header Text:');
+      });
+
+      test('should handle nested HTML in headers', () => {
+        expect(TextProcessor.process('<h2>Header with <span>nested</span> content</h2>')).toBe('Header with nested content:');
+      });
+
+      test('should convert multiple HTML headers', () => {
+        const input = `<h1>Main Title</h1>
+Some content here.
+<h2>Section One</h2>
+More content.`;
+        
+        const result = TextProcessor.process(input);
+        expect(result).toContain('Main Title:');
+        expect(result).toContain('Section One:');
+      });
+
+      test('should handle title and header semantic elements', () => {
+        expect(TextProcessor.process('<title>Page Title</title>')).toBe('Page Title:');
+        expect(TextProcessor.process('<header>Header Content</header>')).toBe('Header Content:');
+      });
+    });
+
+    describe('Text-Based Headers', () => {
+      test('should detect ALL CAPS headers', () => {
+        expect(TextProcessor.process('FEATURES')).toBe('FEATURES:');
+        expect(TextProcessor.process('INSTALLATION GUIDE')).toBe('INSTALLATION GUIDE:');
+      });
+
+      test('should detect underlined headers with equals signs', () => {
+        const input = `Main Title
+=========
+Content follows.`;
+        
+        const result = TextProcessor.process(input);
+        expect(result).toContain('Main Title:');
+        expect(result).not.toContain('=========');
+      });
+
+      test('should detect underlined headers with dashes', () => {
+        const input = `Section Header
+--------------
+Some content here.`;
+        
+        const result = TextProcessor.process(input);
+        expect(result).toContain('Section Header:');
+        expect(result).not.toContain('--------------');
+      });
+
+      test('should detect likely titles based on context', () => {
+        const input = `
+Getting Started
+
+This section covers the basics of installation.
+
+Configuration
+
+Here are the configuration options.`;
+        
+        const result = TextProcessor.process(input);
+        expect(result).toContain('Getting Started:');
+        expect(result).toContain('Configuration:');
+      });
+
+      test('should not detect false positive headers', () => {
+        // Long sentences should not be detected as headers
+        expect(TextProcessor.process('This is a very long sentence that should not be detected as a header because it is too long.')).not.toContain(':');
+        
+        // Sentences ending with punctuation should not be headers
+        expect(TextProcessor.process('This is a sentence.')).not.toContain('This is a sentence:');
+        
+        // Mixed case text should not trigger all-caps detection
+        expect(TextProcessor.process('Mixed Case Text')).not.toContain('Mixed Case Text:');
+      });
+    });
+
+    describe('GitHub-style Content', () => {
+      test('should handle typical GitHub README structure', () => {
+        const input = `# chrome_local_tts_reader
+
+A Chrome extension for local TTS reading.
+
+## Features
+
+- Text chunking for better performance
+- Multiple voice options
+
+## Installation
+
+Follow these steps to install.`;
+        
+        const result = TextProcessor.process(input);
+        expect(result).toContain('chrome_local_tts_reader:');
+        expect(result).toContain('Features:');
+        expect(result).toContain('Installation:');
+        expect(result).toContain('Text chunking for better performance, Multiple voice options');
+      });
+
+      test('should handle repository sections with underlines', () => {
+        const input = `Repository Overview
+==================
+
+This repository contains the source code.
+
+Contributing
+============
+
+Please follow these guidelines.`;
+        
+        const result = TextProcessor.process(input);
+        expect(result).toContain('Repository Overview:');
+        expect(result).toContain('Contributing:');
+      });
     });
   });
 
