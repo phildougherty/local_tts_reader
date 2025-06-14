@@ -5,12 +5,61 @@
  * - Removes special characters that don't read well
  */
 class TextProcessor {
+  // Static reference to HtmlToMarkdown converter
+  static htmlToMarkdown = null;
+  
+  /**
+   * Initialize the TextProcessor with HtmlToMarkdown converter
+   * @param {object} converter - The HtmlToMarkdown converter instance
+   */
+  static init(converter) {
+    this.htmlToMarkdown = converter;
+    console.log('✅ TextProcessor initialized with HtmlToMarkdown converter');
+  }
   /**
    * Process text for TTS
-   * @param {string} text - The text to process
+   * @param {string|object} input - The text to process, or pageData object with html/text
    * @returns {string} - The processed text
    */
-  static process(text) {
+  static process(input) {
+    let text = input;
+    
+    // Handle pageData object with HTML and text
+    if (typeof input === 'object' && input !== null) {
+      console.log('🔍 TextProcessor received pageData:', {
+        type: input.type,
+        hasHtml: !!input.html,
+        hasText: !!input.text,
+        debug: input.debug
+      });
+      
+      // Try HTML to markdown conversion first
+      if (input.html && input.html.trim()) {
+        console.log('🔧 Converting HTML to markdown');
+        console.log('🔍 HTML preview:', input.html.substring(0, 200) + '...');
+        
+        try {
+          // Use HtmlToMarkdown if available
+          if (this.htmlToMarkdown) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = input.html;
+            text = this.htmlToMarkdown.convert(tempDiv);
+            console.log('✅ HTML converted to markdown:', text.substring(0, 200) + '...');
+          } else {
+            console.log('⚠️ HtmlToMarkdown not available, using text fallback');
+            text = input.text || '';
+          }
+        } catch (error) {
+          console.error('❌ HTML to markdown conversion failed:', error);
+          text = input.text || '';
+        }
+      } else {
+        console.log('⚠️ No HTML content, using plain text');
+        text = input.text || '';
+      }
+    }
+    
+    console.log('🔍 TextProcessor final input text:', text);
     if (!text) return '';
     
     let processedText = text;
@@ -18,12 +67,15 @@ class TextProcessor {
     // First, handle HTML headers and convert them to markdown-like format
     processedText = this.processHtmlHeaders(processedText);
     
+    // Handle HTML list items
+    processedText = this.processHtmlLists(processedText);
+    
     // Handle other header patterns (integrated into main line processing below)
     
-    // Remove markdown bold/italic (but be careful with underscores in identifiers)
+    // Remove markdown bold/italic (but be careful with underscores in identifiers and list markers)
     processedText = processedText.replace(/(\*\*|__)(.*?)\1/g, '$2');
-    // Remove single * or _ formatting, but only when it's clearly italics (not underscores in identifiers)
-    processedText = processedText.replace(/\*([^*]+)\*/g, '$1');
+    // Remove single * formatting for italics (after list processing is done below)
+    // We'll handle this after the main line processing to avoid conflicts
     processedText = processedText.replace(/(\s|^)_([^_\s]+)_(\s|$)/g, '$1$2$3');
     
     // Remove markdown code blocks
@@ -54,13 +106,11 @@ class TextProcessor {
         const headerText = trimmedLine.replace(/^#{1,6}\s+/, '');
         processedLines.push(headerText + ':');
       }
-      // Handle list items (second priority)
-      else if (/^[\s]*[-*+]\s+/.test(trimmedLine)) {
-        const itemText = trimmedLine.replace(/^[\s]*[-*+]\s+/, '');
-        processedLines.push(itemText + ',');
-      }
-      else if (/^\s*\d+\.\s+/.test(trimmedLine)) {
-        const itemText = trimmedLine.replace(/^\s*\d+\.\s+/, '');
+      // Handle list items (second priority) - expanded to include more formats
+      else if (this.isListItem(trimmedLine)) {
+        console.log('📋 Found list item:', trimmedLine);
+        const itemText = this.extractListItemText(trimmedLine);
+        console.log('📋 Extracted text:', itemText);
         processedLines.push(itemText + ',');
       }
       // Check for text-based headers (only if not already processed as markdown or list)
@@ -102,6 +152,9 @@ class TextProcessor {
     // Join lines with spaces
     processedText = processedLines.join(' ');
     
+    // Now it's safe to remove italic asterisks since list processing is complete
+    processedText = processedText.replace(/\*([^*]+)\*/g, '$1');
+    
     // Remove special characters that don't read well (after list processing)
     // Note: Keep _ for programming identifiers, remove others
     processedText = processedText.replace(/[|~`]/g, ' ');
@@ -129,6 +182,7 @@ class TextProcessor {
     // Final whitespace cleanup
     processedText = processedText.replace(/\s+/g, ' ').trim();
     
+    console.log('✅ TextProcessor output:', processedText);
     return processedText;
   }
   
@@ -158,6 +212,88 @@ class TextProcessor {
     return processedText;
   }
   
+  /**
+   * Process HTML lists and convert them to markdown-like format
+   * @param {string} text - The text containing HTML lists
+   * @returns {string} - Text with HTML lists converted
+   */
+  static processHtmlLists(text) {
+    let processedText = text;
+    
+    // Remove <ul> and <ol> tags but keep the content
+    processedText = processedText.replace(/<\/?[uo]l[^>]*>/gi, '');
+    
+    // Convert <li>item</li> to - item
+    processedText = processedText.replace(/<li[^>]*>(.*?)<\/li>/gi, (match, content) => {
+      // Clean up any nested HTML tags in the list item content
+      const cleanContent = content.replace(/<[^>]*>/g, '').trim();
+      return `- ${cleanContent}`;
+    });
+    
+    return processedText;
+  }
+  
+  
+  /**
+   * Check if a line is a list item
+   * @param {string} line - The line to check
+   * @returns {boolean} - True if it's a list item
+   */
+  static isListItem(line) {
+    // Standard markdown list markers: -, *, +
+    if (/^[\s]*[-*+]\s+/.test(line)) return true;
+    
+    // Numbered lists: 1., 2., etc.
+    if (/^\s*\d+\.\s+/.test(line)) return true;
+    
+    // Unicode bullet points: •, ◦, ▪, ▫, etc.
+    if (/^[\s]*[•◦▪▫‣⁃]\s+/.test(line)) return true;
+    
+    // Emoji-based lists (common on GitHub): 🎯, 🎭, ⚡, etc.
+    if (/^[\s]*[\u{1F300}-\u{1F9FF}]\s+/u.test(line)) return true;
+    
+    // Arrow-based lists: →, ➤, ⇒, etc.
+    if (/^[\s]*[→➤⇒⟶]\s+/.test(line)) return true;
+    
+    return false;
+  }
+  
+  /**
+   * Extract the text content from a list item
+   * @param {string} line - The list item line
+   * @returns {string} - The extracted text content
+   */
+  static extractListItemText(line) {
+    const trimmedLine = line.trim();
+    
+    // Remove standard markdown markers
+    if (/^[-*+]\s+/.test(trimmedLine)) {
+      return trimmedLine.replace(/^[-*+]\s+/, '');
+    }
+    
+    // Remove numbered list markers
+    if (/^\d+\.\s+/.test(trimmedLine)) {
+      return trimmedLine.replace(/^\d+\.\s+/, '');
+    }
+    
+    // Remove Unicode bullets
+    if (/^[•◦▪▫‣⁃]\s+/.test(trimmedLine)) {
+      return trimmedLine.replace(/^[•◦▪▫‣⁃]\s+/, '');
+    }
+    
+    // Remove emoji markers
+    if (/^[\u{1F300}-\u{1F9FF}]\s+/u.test(trimmedLine)) {
+      return trimmedLine.replace(/^[\u{1F300}-\u{1F9FF}]\s+/u, '');
+    }
+    
+    // Remove arrow markers
+    if (/^[→➤⇒⟶]\s+/.test(trimmedLine)) {
+      return trimmedLine.replace(/^[→➤⇒⟶]\s+/, '');
+    }
+    
+    // Fallback: return the original line if no pattern matches
+    return trimmedLine;
+  }
   
   /**
    * Check if a line is likely an all-caps header

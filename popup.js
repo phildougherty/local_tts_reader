@@ -270,15 +270,38 @@ document.addEventListener('DOMContentLoaded', async function() {
       } else {
         const tabs = await chrome.tabs.query({active: true, currentWindow: true});
         const [tab] = tabs;
-        const result = await chrome.scripting.executeScript({
+        
+        // Inject the shared text extractor and get page data
+        await chrome.scripting.executeScript({
           target: { tabId: tab.id },
-          function: () => {
-            const selection = window.getSelection();
-            return selection.toString().trim() || document.body.innerText;
-          },
+          files: ['textExtractor.js']
+        });
+        
+        const pageDataResult = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          function: () => window.extractPageText()
         });
 
-        let text = result[0].result;
+        const pageData = pageDataResult[0].result;
+        
+        // Show extraction info in popup UI
+        updateStatus(`Extracted: ${pageData.type}, Lists: ${pageData.debug.listCount}, Selector: ${pageData.debug.selector || 'selection'}`, false);
+        
+        let text;
+        
+        // Convert HTML to markdown in popup context where HtmlToMarkdown is available
+        if (pageData.html && pageData.html.trim() && window.HtmlToMarkdown) {
+          console.log('🔧 Converting HTML to markdown in popup');
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = pageData.html;
+          const markdown = window.HtmlToMarkdown.convert(tempDiv);
+          console.log('📄 Converted to markdown:', markdown.substring(0, 200) + '...');
+          text = markdown;
+        } else {
+          console.log('⚠️ Using plain text fallback');
+          text = pageData.text;
+        }
+        
         const settings = getSettings();
         
         // Process text if enabled

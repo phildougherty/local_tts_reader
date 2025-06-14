@@ -38,25 +38,25 @@ function setupContextMenu() {
 }
 
 // Handle context menu clicks
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "readAloud") {
-    let text = info.selectionText || "";
-    
-    if (!text) {
-      // If no text is selected, get the page content
-      chrome.scripting.executeScript({
+    try {
+      // Always use the shared text extractor for consistency
+      await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        function: () => {
-          return document.body.innerText;
-        }
-      }).then(results => {
-        if (results && results[0] && results[0].result) {
-          processAndReadText(results[0].result, tab.id);
-        }
+        files: ['textExtractor.js']
       });
-    } else {
-      // Use the selected text
-      processAndReadText(text, tab.id);
+      
+      const pageDataResult = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        function: () => window.extractPageText()
+      });
+      
+      if (pageDataResult && pageDataResult[0] && pageDataResult[0].result) {
+        processAndReadText(pageDataResult[0].result, tab.id);
+      }
+    } catch (error) {
+      console.error('Error executing script for context menu:', error);
     }
   }
 });
@@ -826,20 +826,26 @@ chrome.commands.onCommand.addListener(async (command) => {
     
     if (!tab) return;
     
-    // Get selected text or page content, same logic as context menu
-    chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      function: () => {
-        const selection = window.getSelection();
-        return selection.toString().trim() || document.body.innerText;
+    // Use the same text extraction logic as popup
+    try {
+      // Inject the shared text extractor
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['textExtractor.js']
+      });
+      
+      // Get page data using the shared extractor
+      const pageDataResult = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        function: () => window.extractPageText()
+      });
+      
+      if (pageDataResult && pageDataResult[0] && pageDataResult[0].result) {
+        processAndReadText(pageDataResult[0].result, tab.id);
       }
-    }).then(results => {
-      if (results && results[0] && results[0].result) {
-        processAndReadText(results[0].result, tab.id);
-      }
-    }).catch(error => {
+    } catch (error) {
       console.error('Error executing script for hotkey:', error);
-    });
+    };
   } else if (command === 'stop-audio') {
     // Stop audio playback using the chunked audio stop mechanism
     chrome.runtime.sendMessage({ type: 'stopAllAudio' });

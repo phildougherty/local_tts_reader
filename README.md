@@ -120,27 +120,56 @@ npm run test:coverage
 
 #### Test Coverage
 
-Current test coverage: **92.72%** statements, **78.57%** branches
+**Current test coverage: 72 tests passing** across 3 test suites covering:
 
-Tests cover:
+- **HTML to Markdown Conversion**: Preserving document structure during extraction (23 tests)
+- **Text Processing**: Natural speech formatting and cleanup (45 tests)  
+- **Integration Testing**: End-to-end pipeline validation (4 tests)
+
+Test areas include:
 - **Header Processing**: Converting `# Header` → `Header:` for natural pauses
 - **List Processing**: Converting `- Item` → `Item,` for comma separation
+- **Structure Preservation**: HTML → Markdown → TTS-friendly text pipeline
 - **Comma Cleanup**: Proper punctuation between sections
 - **Edge Cases**: Null inputs, empty text, error handling
 - **Markdown Processing**: Bold, italic, links, code blocks
 - **Symbol Processing**: Converting `$`, `%`, `&` to words
-- **Real-World Examples**: Documentation and README formats
+- **Real-World Examples**: GitHub, documentation, and README formats
 - **Performance**: Large text handling efficiency
 
-#### Text Processing Improvements
+#### Text Processing Architecture
 
-The `TextProcessor` class enhances TTS naturalness by:
+The extension uses a two-stage processing pipeline for optimal TTS results:
 
-1. **Headers**: `## Title` → `Title:` (adds natural pause indicator)
-2. **Lists**: `- Item 1\n- Item 2` → `Item 1, Item 2` (comma separation for flow)
-3. **Sections**: `## Features\n- Fast\n## Benefits` → `Features: Fast. Benefits:` (proper punctuation)
+1. **HTML to Markdown Conversion** (`HtmlToMarkdown`): 
+   - Extracts content while preserving document structure
+   - Handles headings, lists, tables, and formatted text
+   - Filters out navigation, ads, and non-content elements
+   - Converts HTML lists to markdown format to retain meaning
 
-This creates significantly more natural speech compared to raw markdown text.
+2. **Text Processing** (`TextProcessor`):
+   - **Headers**: `## Title` → `Title:` (adds natural pause indicator)
+   - **Lists**: `- Item 1\n- Item 2` → `Item 1, Item 2` (comma separation for flow)
+   - **Sections**: `## Features\n- Fast\n## Benefits` → `Features: Fast. Benefits:` (proper punctuation)
+
+#### Key Improvement: Structure Preservation
+
+**Before (using `innerText`):**
+```
+Features
+Fast processing
+Better accuracy
+Improved reliability
+```
+*Results in choppy, unnatural TTS speech*
+
+**After (using HTML → Markdown → Processing):**
+```
+Features: Fast processing, Better accuracy, Improved reliability
+```
+*Results in natural, flowing TTS speech with proper pauses*
+
+This creates significantly more natural speech compared to raw text extraction.
 
 ### Making Changes
 

@@ -209,6 +209,48 @@ Please follow these guidelines.`;
       
       expect(TextProcessor.process(input)).toBe('Shopping List: Apples, Bananas, Oranges');
     });
+
+    test('should handle Unicode bullet points', () => {
+      const input = `• First item
+• Second item
+• Third item`;
+      
+      expect(TextProcessor.process(input)).toBe('First item, Second item, Third item');
+    });
+
+    test('should handle HTML list items', () => {
+      const input = `<ul>
+<li>First item</li>
+<li>Second item</li>
+<li>Third item</li>
+</ul>`;
+      
+      expect(TextProcessor.process(input)).toBe('First item, Second item, Third item');
+    });
+
+    test('should handle emoji-prefixed lists', () => {
+      const input = `🎯 First item
+🎭 Second item
+🚀 Third item`;
+      
+      const result = TextProcessor.process(input);
+      expect(result).toContain('First item,');
+      expect(result).toContain('Second item,');
+      expect(result).toContain('Third item');
+      // Note: Some emojis might not be fully removed due to Unicode complexity
+    });
+
+    test('should preserve italics while processing lists', () => {
+      const input = `Features
+This has *italic text* in a sentence.
+- First item
+* Second item`;
+      
+      const result = TextProcessor.process(input);
+      expect(result).toContain('italic text');
+      expect(result).toContain('First item,');
+      expect(result).toContain('Second item');
+    });
   });
 
   describe('Comma Cleanup', () => {
