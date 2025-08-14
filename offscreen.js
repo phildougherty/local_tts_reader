@@ -74,23 +74,9 @@ function playAudioUrl(audioUrl) {
       
       // Connect to audio context only once
       if (!hasSourceConnected) {
-        try {
-          // Disconnect previous source if it exists
-          if (audioSource) {
-            try {
-              audioSource.disconnect();
-            } catch (e) {
-              // Ignore errors if already disconnected
-            }
-          }
-          
-          // Create and connect new source
-          audioSource = audioContext.createMediaElementSource(audioElement);
-          audioSource.connect(audioContext.destination);
-          hasSourceConnected = true;
-        } catch (e) {
-          console.error('Error connecting audio source:', e);
-        }
+        audioSource = audioContext.createMediaElementSource(audioElement);
+        audioSource.connect(audioContext.destination);
+        hasSourceConnected = true;
       }
       
       chrome.runtime.sendMessage({ type: 'stateUpdate', state: 'playing' });
