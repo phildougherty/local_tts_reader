@@ -1,6 +1,16 @@
 let audioPlayer = null;
 let currentAudioUrl = null;
 
+function updateSentenceProgress(info) {
+  const el = document.getElementById('sentenceProgress');
+  if (!el) return;
+  if (!info || !info.total) {
+    el.textContent = '';
+    return;
+  }
+  el.textContent = `Sentence ${info.index + 1} of ${info.total}`;
+}
+
 function updateStatus(message, isError = false) {
   const status = document.getElementById('status');
   status.textContent = message;
@@ -14,20 +24,30 @@ function updateControlButtons(state) {
   const stopBtn = document.getElementById('stopBtn');
   const downloadBtn = document.getElementById('downloadBtn');
   const loadingIndicator = document.getElementById('loadingIndicator');
+  const loadingLabel = document.getElementById('loadingLabel');
   const seekBar = document.getElementById('seekBar');
-  
+
   // Hide loading indicator by default
   loadingIndicator.style.display = 'none';
-  
-  // Stop button is always enabled (except during loading)
-  stopBtn.disabled = state === 'loading';
-  
+
+  // Stop button is always enabled (except during loading/starting)
+  stopBtn.disabled = state === 'loading' || state === 'starting';
+
   switch(state) {
+    case 'starting':
+      playBtn.disabled = true;
+      pauseBtn.disabled = true;
+      downloadBtn.disabled = true;
+      seekBar.disabled = true;
+      loadingLabel.textContent = 'Starting voice engine…';
+      loadingIndicator.style.display = 'flex';
+      break;
     case 'loading':
       playBtn.disabled = true;
       pauseBtn.disabled = true;
       downloadBtn.disabled = true;
       seekBar.disabled = true;
+      loadingLabel.textContent = 'Loading…';
       loadingIndicator.style.display = 'flex';
       break;
     case 'ready':
@@ -136,14 +156,6 @@ function startSeekBarUpdates() {
   return updateInterval;
 }
 
-// Process text based on settings
-function processText(text, settings) {
-  if (settings.preprocessText) {
-    return TextProcessor.process(text);
-  }
-  return text;
-}
-
 document.addEventListener('DOMContentLoaded', async function() {
   // Initialize audio player
   audioPlayer = new AudioPlayer();
@@ -209,26 +221,15 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (updateInterval) clearInterval(updateInterval);
         updateInterval = startSeekBarUpdates();
       } else {
-        const tabs = await chrome.tabs.query({active: true, currentWindow: true});
-        const [tab] = tabs;
-        const result = await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          function: () => {
-            const selection = window.getSelection();
-            return selection.toString().trim() || document.body.innerText;
-          },
-        });
-
-        let text = result[0].result;
+        // Text capture (selection or whole page), sentence splitting,
+        // and per-sentence preprocessing all happen in background.js /
+        // contentScript.js now, so the popup just kicks off a session.
         const settings = getSettings();
-        
-        // Process text if enabled
-        text = processText(text, settings);
-        
+
         await saveSettings();
         updateControlButtons('loading');
-        await audioPlayer.play(text, settings);
-        
+        await audioPlayer.play(settings);
+
         // Restart seek bar updates
         if (updateInterval) clearInterval(updateInterval);
         updateInterval = startSeekBarUpdates();
@@ -282,17 +283,25 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (message.state === 'playing' && !updateInterval) {
           updateInterval = startSeekBarUpdates();
         }
+        if (message.state === 'stopped') {
+          updateSentenceProgress(null);
+        }
         break;
-        
+
       case 'recordingComplete':
         currentAudioUrl = message.audioUrl;
         break;
-        
+
       case 'streamError':
         updateStatus(message.error, true);
         updateControlButtons('stopped');
+        updateSentenceProgress(null);
         break;
-        
+
+      case 'sentenceProgress':
+        updateSentenceProgress(message);
+        break;
+
       case 'timeUpdate':
         if (message.timeInfo && !seekBar.classList.contains('seeking')) {
           seekBar.max = message.timeInfo.duration;

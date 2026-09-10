@@ -1,61 +1,31 @@
 const audioElement = document.getElementById('audioElement');
+let currentChunkIndex = null;
+let previousObjectUrl = null;
 
-// Process audio data received from background script
-function processAudioData(audioDataArray, mimeType, isRecording) {
+// Play one prefetched sentence chunk. background.js is responsible for
+// ordering/prefetching; this just plays whatever it's told to, in order.
+function playChunk(audioDataArray, mimeType, index) {
   try {
-    // Convert array back to Uint8Array
     const uint8Array = new Uint8Array(audioDataArray);
-
-    // Create blob from the array
     const blob = new Blob([uint8Array], { type: mimeType });
-
-    // Create URL for the blob
     const audioUrl = URL.createObjectURL(blob);
 
-    // If recording is enabled, send URL back for download
-    if (isRecording) {
-      chrome.runtime.sendMessage({
-        type: 'recordingComplete',
-        audioUrl: audioUrl
-      });
+    if (previousObjectUrl) {
+      URL.revokeObjectURL(previousObjectUrl);
     }
+    previousObjectUrl = audioUrl;
+    currentChunkIndex = index;
 
-    // Play the audio
-    playAudioUrl(audioUrl);
+    audioElement.src = audioUrl;
+    audioElement.play().catch((err) => {
+      console.error('Play error:', err);
+      chrome.runtime.sendMessage({ type: 'streamError', error: err.message });
+    });
 
-    // Notify that audio is ready to play
     chrome.runtime.sendMessage({ type: 'audioReady' });
   } catch (error) {
-    console.error('Error processing audio data:', error);
-    chrome.runtime.sendMessage({
-      type: 'streamError',
-      error: error.message
-    });
-  }
-}
-
-// Play audio from URL
-function playAudioUrl(audioUrl) {
-  try {
-    console.log('Playing audio URL:', audioUrl);
-
-    // Set up audio element
-    audioElement.src = audioUrl;
-
-    // Start playing
-    audioElement.play().catch(err => {
-      console.error('Play error:', err);
-      chrome.runtime.sendMessage({
-        type: 'streamError',
-        error: err.message
-      });
-    });
-  } catch (error) {
-    console.error('Error playing audio URL:', error);
-    chrome.runtime.sendMessage({
-      type: 'streamError',
-      error: error.message
-    });
+    console.error('Error processing audio chunk:', error);
+    chrome.runtime.sendMessage({ type: 'streamError', error: error.message });
   }
 }
 
@@ -67,19 +37,17 @@ function getTimeInfo() {
   };
 }
 
-// Seek to a specific time
+// Seek to a specific time (within the currently playing chunk)
 function seekTo(time) {
   audioElement.currentTime = time;
 }
 
 // Handle messages from the background script
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  console.log('Offscreen received message:', message.type);
-
   switch (message.type) {
-    case 'processAudioData':
+    case 'playChunk':
       if (message.audioData) {
-        processAudioData(message.audioData, message.mimeType, message.isRecording);
+        playChunk(message.audioData, message.mimeType, message.index);
       }
       break;
 
@@ -92,8 +60,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       break;
 
     case 'stop':
+      currentChunkIndex = null;
       audioElement.pause();
       audioElement.currentTime = 0;
+      audioElement.removeAttribute('src');
+      audioElement.load();
+      if (previousObjectUrl) {
+        URL.revokeObjectURL(previousObjectUrl);
+        previousObjectUrl = null;
+      }
       chrome.runtime.sendMessage({ type: 'stateUpdate', state: 'stopped' });
       break;
 
@@ -113,11 +88,20 @@ audioElement.onplay = () => {
 };
 
 audioElement.onpause = () => {
-  chrome.runtime.sendMessage({ type: 'stateUpdate', state: 'paused' });
+  // Swapping `src` between chunks, or the explicit Stop handler above,
+  // both leave currentTime at/near 0 without the user asking to pause —
+  // only report a genuine user pause.
+  if (!audioElement.ended && audioElement.currentTime > 0) {
+    chrome.runtime.sendMessage({ type: 'stateUpdate', state: 'paused' });
+  }
 };
 
+// A chunk finishing playback means "advance the queue", not "session
+// over" — background.js decides whether there's a next chunk to play.
 audioElement.onended = () => {
-  chrome.runtime.sendMessage({ type: 'stateUpdate', state: 'stopped' });
+  if (currentChunkIndex !== null) {
+    chrome.runtime.sendMessage({ type: 'chunkEnded', index: currentChunkIndex });
+  }
 };
 
 // Add timeupdate event for seeking
