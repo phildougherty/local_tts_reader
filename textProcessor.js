@@ -97,5 +97,7 @@ class TextProcessor {
   }
 }
 
-// Make available globally
-window.TextProcessor = TextProcessor;
+// Make available globally. Loaded both via importScripts() in the
+// background service worker (no `window`) and, previously, as an
+// injected content script (`window` === `self`) — `self` covers both.
+self.TextProcessor = TextProcessor;

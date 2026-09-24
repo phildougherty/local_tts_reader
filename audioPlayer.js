@@ -12,18 +12,20 @@ class AudioPlayer {
       }
     }
   
-    async play(text, settings) {
+    async play(settings) {
       await this.init();
-      
+
       try {
-        // Start streaming audio
-        await chrome.runtime.sendMessage({ 
-          type: 'startStreaming', 
-          text: text, 
+        // Start a new reading session. background.js (via a content
+        // script) captures the selection/page text itself, splits it
+        // into sentence chunks, and streams them in order.
+        await chrome.runtime.sendMessage({
+          type: 'startStreaming',
           settings: settings,
-          record: settings.recordAudio
+          record: settings.recordAudio,
+          mode: 'selection'
         });
-        
+
         this.isPlaying = true;
         return true;
       } catch (error) {
@@ -48,7 +50,11 @@ class AudioPlayer {
   
     stop() {
       if (this.isInitialized) {
-        chrome.runtime.sendMessage({ type: 'stop' });
+        // Routed through background.js (not sent to the offscreen
+        // document directly) so it can abort any in-flight/prefetch
+        // fetch and clear the remaining sentence queue, not just halt
+        // whatever's currently playing.
+        chrome.runtime.sendMessage({ type: 'stopSession' });
         this.isPlaying = false;
       }
     }

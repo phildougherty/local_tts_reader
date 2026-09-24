@@ -8,7 +8,8 @@
     "storage",
     "scripting",
     "offscreen",
-    "contextMenus"
+    "contextMenus",
+    "alarms"
   ],
   "host_permissions": [
     "http://localhost:8000/*",

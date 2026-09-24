@@ -1,0 +1,126 @@
+/**
+ * Lightweight sentence boundary detection.
+ *
+ * Not a full NLP tokenizer — good enough for chunking typical prose
+ * (articles, news, docs) into TTS-sized pieces. Protects common
+ * abbreviations, decimal numbers, single-letter initials, and ellipses
+ * from being mistaken for sentence-ending punctuation. Also treats a
+ * bare newline as a boundary, since contentScript.js inserts one at
+ * block-element boundaries (paragraphs, list items, headings, <br>)
+ * that don't necessarily end in punctuation.
+ *
+ * All string replacements in `protect()` are length-preserving so that
+ * offsets found in the protected text line up exactly with offsets in
+ * the original text — callers only ever see slices of the original.
+ */
+(function (root) {
+  const ABBREVIATIONS = [
+    'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr', 'st', 'vs', 'etc',
+    'approx', 'no', 'fig', 'vol', 'dept', 'univ', 'gen', 'rev', 'hon',
+    'capt', 'col', 'cmdr', 'lt', 'sgt', 'maj', 'gov', 'sen', 'rep',
+    'pres', 'inc', 'ltd', 'co', 'e.g', 'i.e', 'a.m', 'p.m', 'u.s', 'u.k'
+  ];
+
+  const PLACEHOLDER = ' ';
+  const CLOSERS = /["')\]”’]/;
+  const WHITESPACE = /\s/;
+
+  function protect(text) {
+    let working = text;
+
+    for (const abbr of ABBREVIATIONS) {
+      const escaped = abbr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp('\\b' + escaped + '\\.', 'gi');
+      working = working.replace(re, (m) => m.slice(0, -1) + PLACEHOLDER);
+    }
+
+    // Decimal numbers: 3.14
+    working = working.replace(/(\d)\.(?=\d)/g, `$1${PLACEHOLDER}`);
+
+    // Single-letter initials: "J. R. R. Tolkien"
+    working = working.replace(/\b([A-Za-z])\.(?=\s*[A-Z])/g, `$1${PLACEHOLDER}`);
+
+    // Ellipses
+    working = working.replace(/\.\.\./g, `${PLACEHOLDER}${PLACEHOLDER}${PLACEHOLDER}`);
+
+    return working;
+  }
+
+  /**
+   * Find sentence boundaries in `text`.
+   * @param {string} text
+   * @returns {Array<{start: number, end: number}>} offsets into the ORIGINAL text, trimmed
+   */
+  function findSentenceBoundaries(text) {
+    if (!text) return [];
+
+    const protectedText = protect(text);
+    const n = protectedText.length;
+    const rawBoundaries = [];
+    let start = 0;
+    let i = 0;
+
+    while (i < n) {
+      const ch = protectedText[i];
+
+      if (ch === '.' || ch === '!' || ch === '?') {
+        // Consume a run of terminal punctuation, e.g. "?!" or "...".
+        let j = i + 1;
+        while (j < n && (protectedText[j] === '.' || protectedText[j] === '!' || protectedText[j] === '?')) j++;
+        // Consume trailing closing quotes/brackets.
+        while (j < n && CLOSERS.test(protectedText[j])) j++;
+
+        const nextChar = protectedText[j];
+        const isBoundary = j >= n || WHITESPACE.test(nextChar);
+
+        if (isBoundary) {
+          rawBoundaries.push([start, j]);
+          while (j < n && WHITESPACE.test(protectedText[j])) j++;
+          start = j;
+          i = j;
+          continue;
+        }
+        i = j;
+        continue;
+      }
+
+      if (ch === '\n') {
+        if (i > start && protectedText.slice(start, i).trim().length > 0) {
+          rawBoundaries.push([start, i]);
+        }
+        let j = i;
+        while (j < n && WHITESPACE.test(protectedText[j])) j++;
+        start = j;
+        i = j;
+        continue;
+      }
+
+      i++;
+    }
+
+    if (start < n && protectedText.slice(start).trim().length > 0) {
+      rawBoundaries.push([start, n]);
+    }
+
+    return rawBoundaries
+      .map(([s, e]) => {
+        const original = text.slice(s, e);
+        const leadTrim = original.length - original.trimStart().length;
+        const trailTrim = original.length - original.trimEnd().length;
+        return { start: s + leadTrim, end: e - trailTrim };
+      })
+      .filter((b) => b.end > b.start);
+  }
+
+  function splitIntoSentences(text) {
+    return findSentenceBoundaries(text).map(({ start, end }) => text.slice(start, end));
+  }
+
+  const api = { findSentenceBoundaries, splitIntoSentences };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = api;
+  } else {
+    root.SentenceSplitter = api;
+  }
+})(typeof self !== 'undefined' ? self : this);

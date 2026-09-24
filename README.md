@@ -6,6 +6,15 @@ A sleek Chrome extension that converts webpage text to speech using a local Open
 ## Features
 
 - 🎯 Read selected text or entire webpage
+- 📚 Sentence-by-sentence chunking with prefetch, so playback flows from
+  one sentence to the next without waiting on the network mid-read
+- 🖍️ The sentence currently being read is highlighted live on the page
+  (works even when a sentence spans bold text, links, or other inline
+  formatting)
+- 🥶 Cold-start aware: shows a distinct "Starting voice engine…" state
+  and uses a longer timeout for the first request of a session, since
+  some local TTS backends (e.g. a sleeping llama-swap/Chatterbox
+  process) can take up to ~30s to wake up
 - 🎭 Multiple voice options compatible with OpenAI voice mappings
 - ⚡ Adjustable playback speed (0.25x to 4.0x)
 - 💾 Option to save audio for download
@@ -72,14 +81,49 @@ Your local TTS server should:
 \\```
 - Return audio data (mp3/wav)
 
+Note: the extension now sends one request **per sentence** rather than
+one request for the whole selection (see "How reading works" below), so
+`input` will typically be a single sentence, not a full paragraph.
+
 Default server URL: `http://localhost:8000/v1/audio/speech`
+
+## How reading works
+
+When you hit play, the extension:
+1. Captures the current selection (or the whole page if nothing is
+   selected) and splits it into sentences.
+2. Requests the first sentence's audio. The very first request of a
+   new session uses a longer timeout (45-60s) and the popup shows
+   "Starting voice engine…", since some local TTS backends need time
+   to load a model on their first request after being idle. Every
+   request after that uses a shorter timeout (15-20s).
+3. While a sentence plays, the *next* sentence's audio is fetched in
+   the background, so there's no gap waiting on the network between
+   sentences.
+4. The sentence currently playing is highlighted on the page itself
+   (not just scrolled to) via a content script — this works even when
+   a sentence spans multiple inline elements like bold text or links.
+5. Stop immediately cancels any in-flight request and clears the rest
+   of the queue; the highlight is cleared on Stop, when a sentence
+   finishes, and on page navigation.
+6. If a request times out, it's retried once before an error is shown.
+
+A background `chrome.alarms` heartbeat runs while a session is active,
+to reduce the chance Chrome terminates the extension's MV3 service
+worker while waiting on a slow (cold-start) response.
 
 ## Development
 
-The extension consists of three main files:
+The extension's main files:
 - `manifest.json`: Extension configuration
-- `popup.html`: UI layout and styles
-- `popup.js`: Core functionality and event handlers
+- `background.js`: Service worker — owns the reading session (chunking,
+  prefetch, timeouts/retries, cold-start state)
+- `contentScript.js` / `sentenceSplitter.js`: Injected into the page to
+  capture the selection, split it into sentences, and highlight the
+  sentence currently playing
+- `offscreen.js` / `offscreen.html`: Plays each sentence's audio
+- `popup.html` / `popup.js`: UI and settings
+- `textProcessor.js`: Strips markdown/URLs before sending text to TTS
 
 To modify the extension:
 1. Make your changes

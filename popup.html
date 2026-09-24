@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
   <title>TTS Reader</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
   <style>
@@ -56,8 +57,10 @@
       height: 100%;
       background-color: rgba(22, 33, 62, 0.9);
       display: none;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: 8px;
       border-radius: 8px;
       z-index: 10;
     }
@@ -73,6 +76,21 @@
 
     @keyframes spin {
       to { transform: rotate(360deg); }
+    }
+
+    .loading-label {
+      font-size: 12px;
+      color: #e6e6e6;
+      text-align: center;
+      padding: 0 10px;
+    }
+
+    .sentence-progress {
+      font-size: 11px;
+      color: #aaa;
+      text-align: center;
+      margin: -4px 0 10px;
+      min-height: 14px;
     }
 
     .seek-container {
@@ -242,8 +260,11 @@
     
     <div id="loadingIndicator">
       <div class="spinner"></div>
+      <div id="loadingLabel" class="loading-label">Loading…</div>
     </div>
   </div>
+
+  <div id="sentenceProgress" class="sentence-progress"></div>
 
   <div class="seek-container">
     <div class="seek-bar-wrapper">
@@ -306,7 +327,6 @@
 
   <script src="audioPlayer.js"></script>
   <script src="constants.js"></script>
-  <script src="textProcessor.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
